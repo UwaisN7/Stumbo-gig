@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stumbo Pop — Scroll Wrap</title>
+  <style>
+    :root {
+      --sky-top: #7dd3fc;
+      --sky-bottom: #e0f2fe;
+      --candy-light: #ff4d6d;
+      --candy-main: #e11d48;
+      --candy-dark: #881337;
+      --wrap-base: #ff1e56;
+      --wrap-stripe-1: #ffd60a;
+      --wrap-stripe-2: #00bbf9;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #0f172a;
+      overflow-x: hidden;
+    }
+
+    /* Tall scroll runway that drives the animation progress */
+    .scroll-runway {
+      height: 420vh;
+      position: relative;
+    }
+
+    /* Sticky viewport stage */
+    .stage {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-bottom) 78%, #fef3c7 100%);
+    }
+
+    /* Soft drifting clouds */
+    .cloud {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.75);
+      border-radius: 999px;
+      filter: blur(1px);
+      pointer-events: none;
+    }
+    .cloud::before,
+    .cloud::after {
+      content: "";
+      position: absolute;
+      background: inherit;
+      border-radius: 50%;
+    }
+    .cloud-1 {
+      width: 140px;
+      height: 42px;
+      top: 14%;
+      left: 12%;
+    }
+    .cloud-1::before { width: 64px; height: 64px; top: -30px; left: 20px; }
+    .cloud-1::after  { width: 48px; height: 48px; top: -20px; left: 70px; }
+
+    .cloud-2 {
+      width: 170px;
+      height: 48px;
+      top: 24%;
+      right: 10%;
+    }
+    .cloud-2::before { width: 76px; height: 76px; top: -36px; left: 28px; }
+    .cloud-2::after  { width: 54px; height: 54px; top: -22px; left: 88px; }
+
+    /* Minimal HUD */
+    .hud-top {
+      position: absolute;
+      top: 20px;
+      left: 24px;
+      right: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .badge {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+    }
+
+    .flavors {
+      display: flex;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .flavor-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2.5px solid #fff;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+      transition: transform 0.15s ease;
+    }
+    .flavor-btn:hover { transform: scale(1.15); }
+    .flavor-btn.active { outline: 2.5px solid #0f172a; }
+
+    /* Main SVG Canvas */
+    #scene {
+      width: min(92vw, 440px);
+      height: auto;
+      max-height: 82vh;
+      z-index: 5;
+      overflow: visible;
+    }
+
+    /* Bottom scroll prompt & progress bar */
+    .hud-bottom {
+      position: absolute;
+      bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      z-index: 10;
+      transition: opacity 0.3s ease;
+    }
+
+    .scroll-hint {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #1e293b;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 6px 16px;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .progress-track {
+      width: 180px;
+      height: 6px;
+      background: rgba(15, 23, 42, 0.15);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: #e11d48;
+      border-radius: 999px;
+    }
+
+    /* ---- Extras ---- */
+    .streaks { position:absolute; inset:0; opacity:0; pointer-events:none; overflow:hidden; z-index:2; }
+    .streak { position:absolute; top:0; width:2px; border-radius:2px;
+      background:linear-gradient(180deg, transparent, rgba(255,255,255,.85));
+      animation: rush linear infinite; }
+    @keyframes rush { from { transform:translateY(110vh); } to { transform:translateY(-40vh); } }
+
+    .big-title { position:absolute; top:11%; left:50%; z-index:8; opacity:0; pointer-events:none;
+      transform:translate(-50%,20px); text-align:center; color:#fff; font-weight:900;
+      font-size:clamp(2.2rem,8vw,4.8rem); letter-spacing:.02em; line-height:1;
+      text-shadow:0 3px 0 #e11d48, 0 6px 18px rgba(15,23,42,.35); }
+    .big-title small { display:block; margin-top:10px; font-size:.9rem; font-weight:700;
+      letter-spacing:.12em; text-transform:uppercase; text-shadow:0 2px 8px rgba(15,23,42,.45); }
+
+    .btn-row { display:flex; gap:8px; }
+    .pill-btn { font:inherit; font-size:.8rem; font-weight:700; cursor:pointer; border:0;
+      padding:6px 14px; border-radius:999px; background:rgba(255,255,255,.9); color:#0f172a;
+      box-shadow:0 4px 12px rgba(0,0,0,.1); transition:transform .15s ease; }
+    .pill-btn:hover { transform:translateY(-2px); }
+
+    .confetti { position:absolute; left:50%; top:48%; width:8px; height:12px; border-radius:2px;
+      pointer-events:none; z-index:9; }
+  </style>
+</head>
+<body>
+
+  <main class="scroll-runway" id="runway">
+    <section class="stage" id="stage">
+      <div class="cloud cloud-1" id="cloud1"></div>
+      <div class="cloud cloud-2" id="cloud2"></div>
+      <div class="streaks" id="streaks"></div>
+      <div class="big-title" id="bigTitle">WRAPPED.<small>Pop it · lick it · repeat</small></div>
+
+      <div class="hud-top">
+        <div class="badge" id="statusText">SCROLL TO DROP WRAPPER</div>
+        <div class="flavors" aria-label="Choose Stumbo Flavour">
+          <button class="flavor-btn active" style="background:#e11d48" data-flavor="red" title="Racing Red"></button>
+          <button class="flavor-btn" style="background:#0284c7" data-flavor="blue" title="Blue Raspberry"></button>
+          <button class="flavor-btn" style="background:#7e22ce" data-flavor="purple" title="Black Cherry"></button>
+          <button class="flavor-btn" style="background:#16a34a" data-flavor="green" title="Cream Soda"></button>
+        </div>
+      </div>
+
+      <svg id="scene" viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <!-- Candy sphere shading -->
+          <radialGradient id="candyGrad" cx="35%" cy="30%" r="65%">
+            <stop offset="0%" stop-color="var(--candy-light)" />
+            <stop offset="55%" stop-color="var(--candy-main)" />
+            <stop offset="100%" stop-color="var(--candy-dark)" />
+          </radialGradient>
+
+          <!-- White plastic stick shading -->
+          <linearGradient id="stickGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#e2e8f0" />
+            <stop offset="40%" stop-color="#ffffff" />
+            <stop offset="100%" stop-color="#cbd5e1" />
+          </linearGradient>
+
+          <!-- Cellophane gloss overlay -->
+          <linearGradient id="cellophaneSheen" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55" />
+            <stop offset="35%" stop-color="#ffffff" stop-opacity="0.05" />
+            <stop offset="65%" stop-color="#ffffff" stop-opacity="0.3" />
+            <stop offset="100%" stop-color="#000000" stop-opacity="0.18" />
+          </linearGradient>
+
+          <!-- Dynamic clip path matching the morphing wrapper -->
+          <clipPath id="wrapperClip">
+            <path id="wrapperClipPath" d="" />
+          </clipPath>
+        </defs>
+
+        <!-- Ground shadow -->
+        <ellipse id="groundShadow" cx="200" cy="458" rx="48" ry="10" fill="rgba(15, 23, 42, 0.16)" />
+
+        <!-- STUMBO LOLLIPOP -->
+        <g id="lollipop">
+          <!-- White stick -->
+          <rect x="193" y="292" width="14" height="162" rx="7" fill="url(#stickGrad)" />
+          <!-- Candy ball -->
+          <circle cx="200" cy="245" r="54" fill="url(#candyGrad)" />
+          <!-- Signature Stumbo equator ridge -->
+          <ellipse cx="200" cy="245" rx="55.5" ry="9" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="3.5" />
+          <!-- Specular candy shine -->
+          <path d="M 168,218 A 38,38 0 0,1 196,202" fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="6" stroke-linecap="round" />
+        </g>
+
+        <!-- FALLING & WRAPPING CELLOPHANE WRAPPER -->
+        <g id="wrapperGroup">
+          <!-- Clipped wrapper artwork -->
+          <g clip-path="url(#wrapperClip)">
+            <!-- Base wrapper color -->
+            <rect x="50" y="140" width="300" height="230" fill="var(--wrap-base)" />
+
+            <!-- Classic Stumbo diagonal stripes -->
+            <g transform="rotate(-18 200 245)">
+              <rect x="40" y="155" width="320" height="22" fill="var(--wrap-stripe-1)" />
+              <rect x="40" y="192" width="320" height="14" fill="var(--wrap-stripe-2)" />
+              <rect x="40" y="280" width="320" height="14" fill="var(--wrap-stripe-2)" />
+              <rect x="40" y="308" width="320" height="22" fill="var(--wrap-stripe-1)" />
+            </g>
+
+            <!-- Stumbo Logo Pill -->
+            <g id="stumboLogo" transform="translate(200, 245)">
+              <ellipse cx="0" cy="0" rx="46" ry="22" fill="#ffd60a" stroke="#ffffff" stroke-width="3.5" />
+              <text x="0" y="6" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="18" fill="#1e1b4b" letter-spacing="0.5">
+                STUMBO
+              </text>
+            </g>
+
+            <!-- Cellophane highlight & shading -->
+            <rect x="50" y="140" width="300" height="230" fill="url(#cellophaneSheen)" />
+
+            <!-- Twist crinkle lines (appear as wrapper cinches around stick) -->
+            <g id="twistCreases" opacity="0" stroke="#ffffff" stroke-linecap="round">
+              <path d="M 193,302 L 182,342" stroke-width="2" opacity="0.7" />
+              <path d="M 198,304 L 195,344" stroke-width="2.5" opacity="0.85" />
+              <path d="M 203,304 L 207,344" stroke-width="2" opacity="0.75" />
+              <path d="M 207,302 L 220,342" stroke-width="2" opacity="0.65" />
+              <!-- Tight neck band -->
+              <path d="M 190,304 Q 200,309 210,304" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="3" />
+            </g>
+          </g>
+
+          <!-- Crisp outer cellophane border -->
+          <path id="wrapperOutline" d="" fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="2" stroke-linejoin="round" />
+        </g>
+
+        <!-- Celebratory pop sparkles at 100% wrapped -->
+        <g id="sparkles" opacity="0" stroke="#ffd60a" stroke-width="3.5" stroke-linecap="round">
+          <line x1="125" y1="190" x2="110" y2="176" />
+          <line x1="275" y1="190" x2="290" y2="176" />
+          <line x1="118" y1="245" x2="98" y2="245" />
+          <line x1="282" y1="245" x2="302" y2="245" />
+          <line x1="200" y1="168" x2="200" y2="148" />
+        </g>
+      </svg>
+
+      <div class="hud-bottom" id="hudBottom">
+        <div class="scroll-hint" id="scrollHint">↓ Scroll down to wrap ↓</div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="btn-row">
+          <button class="pill-btn" id="autoBtn">▶ Auto-play</button>
+          <button class="pill-btn" id="soundBtn">🔇 Sound off</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const runway = document.getElementById("runway");
+    const wrapperGroup = document.getElementById("wrapperGroup");
+    const wrapperClipPath = document.getElementById("wrapperClipPath");
+    const wrapperOutline = document.getElementById("wrapperOutline");
+    const twistCreases = document.getElementById("twistCreases");
+    const stumboLogo = document.getElementById("stumboLogo");
+    const sparkles = document.getElementById("sparkles");
+    const progressFill = document.getElementById("progressFill");
+    const statusText = document.getElementById("statusText");
+    const scrollHint = document.getElementById("scrollHint");
+    const cloud1 = document.getElementById("cloud1");
+    const cloud2 = document.getElementById("cloud2");
+
+    // Helpers
+    const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
+    // Flavour presets
+    const flavors = {
+      red:    { light: "#ff4d6d", main: "#e11d48", dark: "#881337", wrap: "#ff1e56", s1: "#ffd60a", s2: "#00bbf9" },
+      blue:   { light: "#38bdf8", main: "#0284c7", dark: "#0c4a6e", wrap: "#0096c7", s1: "#ffd60a", s2: "#ff4d6d" },
+      purple: { light: "#c084fc", main: "#7e22ce", dark: "#3b0764", wrap: "#6d28d9", s1: "#fde047", s2: "#f43f5e" },
+      green:  { light: "#4ade80", main: "#16a34a", dark: "#14532d", wrap: "#15803d", s1: "#fef08a", s2: "#38bdf8" }
+    };
+
+    document.querySelectorAll(".flavor-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".flavor-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        const f = flavors[btn.dataset.flavor];
+        const root = document.documentElement.style;
+        root.setProperty("--candy-light", f.light);
+        root.setProperty("--candy-main", f.main);
+        root.setProperty("--candy-dark", f.dark);
+        root.setProperty("--wrap-base", f.wrap);
+        root.setProperty("--wrap-stripe-1", f.s1);
+        root.setProperty("--wrap-stripe-2", f.s2);
+      });
+    });
+
+    function buildWrapperPath(wrapT, twistT) {
+      // Stage 1: Open flat sheet -> Stage 2: Draped over sphere
+      const tlX = lerp(85, 142, wrapT);
+      const tlY = lerp(195, 245, wrapT);
+      const topCtrlY = lerp(180, 129, wrapT);
+      const trX = lerp(315, 258, wrapT);
+      const trY = lerp(195, 245, wrapT);
+
+      // Stage 2 -> Stage 3: Cheek curves & pinched neck around the stick
+      const rCheekX = lerp(lerp(318, 258, wrapT), 258, twistT);
+      const rCheekY = lerp(lerp(225, 278, wrapT), 282, twistT);
+      const rNeckCtrlX = lerp(lerp(322, 252, wrapT), 230, twistT);
+      const rNeckCtrlY = lerp(lerp(255, 302, wrapT), 303, twistT);
+
+      const rNeckX = lerp(lerp(325, 242, wrapT), 207, twistT);
+      const rNeckY = lerp(lerp(275, 315, wrapT), 305, twistT);
+
+      const rTailX = lerp(lerp(328, 246, wrapT), 225, twistT);
+      const rTailY = lerp(lerp(290, 336, wrapT), 344, twistT);
+      const tailMidY = lerp(lerp(278, 330, wrapT), 338, twistT);
+
+      const lTailX = lerp(lerp(72, 154, wrapT), 175, twistT);
+      const lTailY = rTailY;
+
+      const lNeckX = lerp(lerp(75, 158, wrapT), 193, twistT);
+      const lNeckY = rNeckY;
+
+      const lNeckCtrlX = lerp(lerp(78, 148, wrapT), 170, twistT);
+      const lNeckCtrlY = rNeckCtrlY;
+      const lCheekX = lerp(lerp(82, 142, wrapT), 142, twistT);
+      const lCheekY = rCheekY;
+
+      return `
+        M ${tlX.toFixed(1)},${tlY.toFixed(1)}
+        Q 200,${topCtrlY.toFixed(1)} ${trX.toFixed(1)},${trY.toFixed(1)}
+        C ${rCheekX.toFixed(1)},${rCheekY.toFixed(1)} ${rNeckCtrlX.toFixed(1)},${rNeckCtrlY.toFixed(1)} ${rNeckX.toFixed(1)},${rNeckY.toFixed(1)}
+        L ${rTailX.toFixed(1)},${rTailY.toFixed(1)}
+        Q 200,${tailMidY.toFixed(1)} ${lTailX.toFixed(1)},${lTailY.toFixed(1)}
+        L ${lNeckX.toFixed(1)},${lNeckY.toFixed(1)}
+        C ${lNeckCtrlX.toFixed(1)},${lNeckCtrlY.toFixed(1)} ${lCheekX.toFixed(1)},${lCheekY.toFixed(1)} ${tlX.toFixed(1)},${tlY.toFixed(1)}
+        Z
+      `;
+    }
+
+    function updateScene() {
+      const maxScroll = runway.offsetHeight - window.innerHeight;
+      const progress = maxScroll > 0 ? clamp(window.scrollY / maxScroll, 0, 1) : 0;
+
+      // 3 Phases of the animation
+      const fallT = easeInOut(clamp(progress / 0.45, 0, 1));
+      const wrapT = easeInOut(clamp((progress - 0.45) / 0.33, 0, 1));
+      const twistT = easeInOut(clamp((progress - 0.78) / 0.22, 0, 1));
+
+      // Skyfall vertical drop & wind flutter
+      const dropY = lerp(-240, 0, fallT);
+      const swayX = Math.sin(fallT * Math.PI * 2.5) * 32 * (1 - fallT);
+      const tiltDeg = Math.cos(fallT * Math.PI * 2.5) * 14 * (1 - fallT);
+
+      wrapperGroup.setAttribute(
+        "transform",
+        `translate(${swayX.toFixed(1)}, ${dropY.toFixed(1)}) rotate(${tiltDeg.toFixed(1)} 200 245)`
+      );
+
+      // Update wrapper morph path
+      const d = buildWrapperPath(wrapT, twistT);
+      wrapperClipPath.setAttribute("d", d);
+      wrapperOutline.setAttribute("d", d);
+
+      // Subtle perspective squeeze on logo as it hugs the round sweet
+      const logoScaleX = lerp(1.12, 0.94, wrapT);
+      const logoScaleY = lerp(1.08, 0.96, wrapT);
+      stumboLogo.setAttribute("transform", `translate(200, 245) scale(${logoScaleX.toFixed(2)}, ${logoScaleY.toFixed(2)})`);
+
+      // Show twist creases & pop sparkles
+      twistCreases.setAttribute("opacity", twistT.toFixed(2));
+      const popT = clamp((progress - 0.94) / 0.06, 0, 1);
+      sparkles.setAttribute("opacity", popT.toFixed(2));
+      sparkles.setAttribute("transform", `translate(200 245) scale(${lerp(0.85, 1.08, popT).toFixed(2)}) translate(-200 -245)`);
+
+      // Parallax clouds
+      cloud1.style.transform = `translateY(${progress * 70}px)`;
+      cloud2.style.transform = `translateY(${progress * 110}px)`;
+
+      extras(progress, fallT, wrapT);
+
+      // Update HUD
+      progressFill.style.width = `${(progress * 100).toFixed(1)}%`;
+      if (progress < 0.45) {
+        statusText.textContent = "1 / 3 · FALLING FROM THE SKY";
+        scrollHint.textContent = "↓ Keep scrolling ↓";
+      } else if (progress < 0.78) {
+        statusText.textContent = "2 / 3 · WRAPPING THE SWEET";
+        scrollHint.textContent = "↓ Almost there ↓";
+      } else if (progress < 0.98) {
+        statusText.textContent = "3 / 3 · TWISTING THE SEAL";
+        scrollHint.textContent = "↓ Twist it tight ↓";
+      } else {
+        statusText.textContent = "WRAPPED & READY!";
+        scrollHint.textContent = "↑ Scroll up to unwrap ↑";
+      }
+    }
+
+    // ---------- EXTRAS ----------
+    const stage = document.getElementById("stage");
+    const streaks = document.getElementById("streaks");
+    const bigTitle = document.getElementById("bigTitle");
+    const lollipop = document.getElementById("lollipop");
+    const shadow = document.getElementById("groundShadow");
+    const autoBtn = document.getElementById("autoBtn");
+    const soundBtn = document.getElementById("soundBtn");
+
+    // Wind streaks while falling
+    for (let i = 0; i < 18; i++) {
+      const el = document.createElement("i");
+      el.className = "streak";
+      el.style.left = (Math.random() * 100).toFixed(1) + "%";
+      el.style.height = (80 + Math.random() * 140).toFixed(0) + "px";
+      el.style.animationDuration = (0.5 + Math.random() * 0.7).toFixed(2) + "s";
+      el.style.animationDelay = (-Math.random() * 1.2).toFixed(2) + "s";
+      streaks.appendChild(el);
+    }
+
+    // Sky drifts from morning to sunset as you scroll
+    const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const mix = (a, b, t) => {
+      const A = hex(a), B = hex(b);
+      return `rgb(${A.map((v, i) => Math.round(lerp(v, B[i], t))).join(",")})`;
+    };
+
+    // Sound (WebAudio, no files needed): crinkly noise bursts + thump + pop
+    let actx = null, noiseBuf = null, soundOn = false;
+    function initAudio() {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      noiseBuf = actx.createBuffer(1, actx.sampleRate * 0.5, actx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    function crinkle(vol) {
+      if (!soundOn) return;
+      const t = actx.currentTime, dur = 0.03 + Math.random() * 0.05;
+      const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+      src.buffer = noiseBuf;
+      src.playbackRate.value = 0.8 + Math.random() * 1.6;
+      f.type = "highpass";
+      f.frequency.value = 2500 + Math.random() * 3000;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f); f.connect(g); g.connect(actx.destination);
+      src.start(t, Math.random() * 0.3, dur + 0.02);
+    }
+    function blip(f0, f1, vol, dur) {
+      if (!soundOn) return;
+      const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(actx.destination);
+      o.start(t); o.stop(t + dur + 0.02);
+    }
+    soundBtn.addEventListener("click", () => {
+      if (!actx) initAudio();
+      actx.resume();
+      soundOn = !soundOn;
+      soundBtn.textContent = soundOn ? "🔊 Sound on" : "🔇 Sound off";
+    });
+
+    // Confetti burst when fully wrapped
+    function confetti() {
+      const cols = ["#ffd60a", "#00bbf9", "#ff4d6d", "#ffffff"];
+      for (let i = 0; i < 46; i++) {
+        const e = document.createElement("i");
+        e.className = "confetti";
+        e.style.background = cols[i % 4];
+        stage.appendChild(e);
+        const a = Math.random() * Math.PI * 2, r = 120 + Math.random() * 260;
+        e.animate(
+          [
+            { transform: "translate(0,0) rotate(0deg)", opacity: 1 },
+            { transform: `translate(${Math.cos(a) * r}px,${Math.sin(a) * r + 160}px) rotate(${Math.random() * 720}deg)`, opacity: 0 }
+          ],
+          { duration: 1100 + Math.random() * 700, easing: "cubic-bezier(.1,.7,.3,1)" }
+        ).onfinish = () => e.remove();
+      }
+    }
+
+    // Auto-play for presentations (any wheel/touch/key press cancels it)
+    let auto = null;
+    function stopAuto() {
+      if (auto) { cancelAnimationFrame(auto); auto = null; autoBtn.textContent = "▶ Auto-play"; }
+    }
+    autoBtn.addEventListener("click", () => {
+      if (auto) return stopAuto();
+      const max = runway.offsetHeight - window.innerHeight;
+      const from = window.scrollY, to = from > max - 5 ? 0 : max;
+      const dur = Math.max(600, 9000 * Math.abs(to - from) / max), t0 = performance.now();
+      autoBtn.textContent = "⏸ Stop";
+      const step = (now) => {
+        const k = Math.min((now - t0) / dur, 1);
+        window.scrollTo(0, from + (to - from) * k);
+        if (k < 1) auto = requestAnimationFrame(step); else stopAuto();
+      };
+      auto = requestAnimationFrame(step);
+    });
+    ["wheel", "touchstart", "keydown"].forEach((ev) => window.addEventListener(ev, stopAuto, { passive: true }));
+
+    // Per-frame extras, called from updateScene()
+    let prevP = 0, acc = 0, done = false;
+    function extras(p, fallT, wrapT) {
+      const root = document.documentElement.style;
+      root.setProperty("--sky-top", mix("#7dd3fc", "#c4b5fd", p));
+      root.setProperty("--sky-bottom", mix("#e0f2fe", "#fed7aa", p));
+
+      streaks.style.opacity = (Math.sin(Math.PI * clamp(p / 0.45, 0, 1)) * 0.8).toFixed(2);
+
+      // Landing impact: candy squashes, shadow swells as the wrapper nears
+      const hit = clamp(1 - Math.abs(p - 0.47) / 0.05, 0, 1), sq = 0.06 * hit;
+      lollipop.setAttribute("transform", `translate(200 454) scale(${(1 + sq * 0.7).toFixed(3)} ${(1 - sq).toFixed(3)}) translate(-200 -454)`);
+      shadow.setAttribute("rx", (lerp(26, 50, fallT) + hit * 6).toFixed(1));
+      shadow.setAttribute("fill", `rgba(15,23,42,${lerp(0.06, 0.18, fallT).toFixed(2)})`);
+
+      // Big "WRAPPED." title
+      const pop = clamp((p - 0.94) / 0.06, 0, 1);
+      bigTitle.style.opacity = pop.toFixed(2);
+      bigTitle.style.transform = `translate(-50%, ${((1 - pop) * 20).toFixed(1)}px) scale(${lerp(0.9, 1, pop).toFixed(3)})`;
+
+      // Sound triggers
+      if (p > 0.45) {
+        acc += Math.abs(p - prevP);
+        let n = 0;
+        while (acc > 0.007 && n++ < 4) { crinkle(0.05 + Math.random() * 0.08); acc -= 0.007; }
+        if (acc > 0.007) acc = 0;
+      }
+      if (prevP < 0.45 && p >= 0.45) blip(140, 50, 0.4, 0.18);
+      if (!done && p >= 0.98) { done = true; confetti(); blip(700, 180, 0.25, 0.15); }
+      else if (p < 0.9) done = false;
+      prevP = p;
+    }
+
+    window.addEventListener("scroll", () => requestAnimationFrame(updateScene), { passive: true });
+    window.addEventListener("resize", updateScene);
+    updateScene();
+  </script>
+</body>
+</html>
